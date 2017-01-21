@@ -28,7 +28,7 @@ fn main() {
     let opengl = OpenGL::V2_1;
 
     let mut window: Window = WindowSettings::new(
-            "rustylife",
+            "a bugs life",
             [1280, 720]
         )
         .opengl(opengl)
@@ -248,17 +248,7 @@ impl World {
             return 0;
         }
 
-        let c : &Creature = &self.creatures[0];
-        let oldest = c.birthday;
-        //for creature in &self.creatures {
-        //    if creature.birthday < oldest {
-        //        oldest = creature.birthday;
-        //        c = creature;
-        //    }
-        //}
-
-
-        return self.time - oldest;
+        return self.time - self.creatures[0].birthday;
     }
 }
 
@@ -296,8 +286,8 @@ impl Tile {
     {
         //return graphics::math::hsv([1.0, 1.0, 1.0, 1.0], self.ttype as f32 / 5.0, 0.75, self.food as f32 / 100.0);
 
-        [ self.food as f32 / 100.0, self.ttype as f32 / 5.0, 0.75, 1.0 ]                          // red food, green type
-        //[ self.food as f32 / 100.0, self.food as f32 / 100.0, self.food as f32 / 100.0, 1.0 ]     // black and white food
+        //[ self.food as f32 / 100.0, self.ttype as f32 / 5.0, 0.75, 1.0 ]                          // red food, green type
+        [ self.food as f32 / 100.0, self.food as f32 / 100.0, self.food as f32 / 100.0, 1.0 ]     // black and white food
     }
 }
 
