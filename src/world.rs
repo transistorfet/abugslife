@@ -25,10 +25,10 @@ impl World {
         let region = Region::new();
 
         let mut creatures : Vec<Creature> = Vec::new();
-        for _ in 0..CREAT_INIT {
+        for i in 0..CREAT_INIT {
             let position = ( rand::thread_rng().gen_range(0.0, region.size[0] as f64), rand::thread_rng().gen_range(0.0, region.size[1] as f64) );
             let size = rand::thread_rng().gen_range(0.75, 1.25);
-            let colour = rand::thread_rng().gen_range(0.0, 1.0);
+            let colour = i as f32 / CREAT_INIT as f32;
 
             let creature = Creature::new(position.0, position.1, size, 0.05, 0.0, 1, colour, None);
             creatures.push(creature);
@@ -133,10 +133,7 @@ impl Region {
         if time % 10 == 0 {
             for col in 0..self.size[0] {
                 for row in 0..self.size[1] {
-                    self.tiles[col][row].food += rand::thread_rng().gen_range(0.0, 1.0) * self.season;
-                    if self.tiles[col][row].food > 100.0 {
-                        self.tiles[col][row].food = 100.0;
-                    }
+                    self.tiles[col][row].grow(self.season);
                 }
             }
         }
@@ -164,11 +161,20 @@ impl Tile {
         self.food -= r;
         return r;
     }
+
+    fn grow(&mut self, season: f64)
+    {
+        //self.food += rand::thread_rng().gen_range(0.0, 0.25) * season * self.ttype as f64;
+        self.food += rand::thread_rng().gen_range(0.0, 1.0) * season;
+        if self.food > 100.0 {
+            self.food = 100.0;
+        }
+    }
 }
 
 
 
-const CREAT_INIT : i32 = 40;
+const CREAT_INIT : i32 = 100;
 
 pub struct Creature {
     pub birthday: WorldTime,
@@ -238,16 +244,24 @@ impl Creature {
         //self.speed += (output[1] - 0.5) * 0.001;
         self.angle += if output[0] > 0.5 { 0.2 } else if output[1] > 0.5 { -0.2 } else { 0.0 };
         self.speed = if output[2] > 0.5 { 0.2 } else { 0.001 };
+        //self.speed = if output[2] > 0.9 { 0.3 } else if output[2] > 0.6 { 0.15 } else { 0.001 };
 
+        /*
+        if self.angle < 0.0 {
+	    self.angle = 2.0 * f64::consts::PI - self.angle
+        }
+	self.angle = self.angle % (2.0 * f64::consts::PI);
+        */
         self.speed = self.speed.max(0.0).min(1.0);
 
         self.position[0] += self.speed * self.angle.cos();
         self.position[1] += self.speed * self.angle.sin();
         self.position = region.wrap_position(self.position);
 
-        self.size -= self.size * 0.005;  // cost to live
         let food = region.tiles[self.position[0] as usize][self.position[1] as usize].feed();
+        self.size -= self.size * 0.005;  // cost to live
         self.size += ((1.0 / self.size).powf(2.0) * food * 0.01) - 0.005;
+        //self.size += ((1.0 / self.size) * food * 0.01);
     }
 
     pub fn write(&self) -> Result<(), io::Error>
@@ -280,9 +294,9 @@ impl Brain {
     fn new() -> Brain
     {
         let mut layers : Vec<Layer> = vec!();
-        layers.push(Layer::new(BRAIN_IN, BRAIN_L1));
-        layers.push(Layer::new(BRAIN_L1, BRAIN_L2));
-        layers.push(Layer::new(BRAIN_L2, BRAIN_OUT));
+        layers.push(Layer::new(BRAIN_IN, BRAIN_L1, Activation::Sigmoid));
+        layers.push(Layer::new(BRAIN_L1, BRAIN_L2, Activation::Sigmoid));
+        layers.push(Layer::new(BRAIN_L2, BRAIN_OUT, Activation::Sigmoid));
 
         Brain {
             layers: layers,
@@ -302,12 +316,6 @@ impl Brain {
 
     fn forward(&mut self, input : &Vec<f64>) -> Option<Vec<f64>>
     {
-        // TODO
-        // result = input;
-        //for each layer in brain
-        //  result = layer.forward(result);
-        // return result;
-
         let mut output = input.to_vec();
         for layer in &self.layers {
             match layer.forward(&output) {
@@ -322,16 +330,24 @@ impl Brain {
     }
 }
 
+#[derive(Copy, Clone, RustcDecodable, RustcEncodable)]
+enum Activation {
+    Sigmoid,
+    Tanh,
+    ReLU,
+}
+
 #[allow(non_snake_case)]
 #[derive(RustcDecodable, RustcEncodable)]
 pub struct Layer {
     W: Vec<Vec<f64>>,
     b: Vec<f64>,
+    activation: Activation,
 }
 
 #[allow(non_snake_case)]
 impl Layer {
-    fn new(width: u32, height: u32) -> Layer
+    fn new(width: u32, height: u32, activation: Activation) -> Layer
     {
         let mut W : Vec<Vec<f64>> = vec!();
         for _ in 0..height {
@@ -350,6 +366,7 @@ impl Layer {
         Layer {
             W: W,
             b: b,
+            activation: activation,
         }
     }
 
@@ -372,6 +389,7 @@ impl Layer {
         Layer {
             W: W,
             b: b,
+            activation: self.activation,
         }
     }
 
@@ -389,7 +407,12 @@ impl Layer {
             for u in 0..Wv.len() {
                 sum += Wv[u] * x[u];
             }
-            output.push(1.0 / (1.0 + (-sum).exp()));
+            sum = match self.activation {
+                Activation::Sigmoid => 1.0 / (1.0 + (-sum).exp()),
+                Activation::Tanh => sum.tanh(),
+                Activation::ReLU => sum.max(0.0),
+            };
+            output.push(sum);
         }
         return Some(output);
     }
