@@ -67,8 +67,8 @@ fn main() {
             },
             Event::Input(Press(Keyboard(Key::Down))) => {
                 app.viewport.origin[1] += 1.0;
-                if app.viewport.origin[1] >= app.world.region.size[1] as f64 {
-                    app.viewport.origin[1] = app.world.region.size[1] as f64;
+                if app.viewport.origin[1] >= app.world.terrain.size[1] as f64 {
+                    app.viewport.origin[1] = app.world.terrain.size[1] as f64;
                 }
             },
             Event::Input(Press(Keyboard(Key::Left))) => {
@@ -79,8 +79,8 @@ fn main() {
             },
             Event::Input(Press(Keyboard(Key::Right))) => {
                 app.viewport.origin[0] += 1.0;
-                if app.viewport.origin[0] >= app.world.region.size[0] as f64 {
-                    app.viewport.origin[0] = app.world.region.size[0] as f64;
+                if app.viewport.origin[0] >= app.world.terrain.size[0] as f64 {
+                    app.viewport.origin[0] = app.world.terrain.size[0] as f64;
                 }
             },
             Event::Input(Press(Keyboard(Key::NumPadPlus))) => {
@@ -217,7 +217,7 @@ impl WorldViewport {
 impl World {
     fn render(&self, c: &Context, gl: &mut GlGraphics, glyph: &mut GlyphCache, viewport: &WorldViewport)
     {
-        self.region.render(c, gl, viewport);
+        self.terrain.render(c, gl, viewport);
 
         for creature in &self.creatures {
             creature.render(c, gl, viewport, self.time);
@@ -233,10 +233,10 @@ impl World {
         Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Total: {}", self.total_lives), glyph, &c.draw_state, transform, gl);
 
         let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + FONTSIZE * 3) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Food: {:.0}", self.region.total_food()), glyph, &c.draw_state, transform, gl);
+        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Food: {:.0}", self.terrain.total_food()), glyph, &c.draw_state, transform, gl);
 
         let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + FONTSIZE * 4) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Season: {:.4}", self.region.season), glyph, &c.draw_state, transform, gl);
+        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Season: {:.4}", self.terrain.season), glyph, &c.draw_state, transform, gl);
 
         let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + FONTSIZE * 5) as f64);
         Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Oldest: {} / {}", self.get_oldest(), self.time), glyph, &c.draw_state, transform, gl);
@@ -252,7 +252,7 @@ impl World {
     }
 }
 
-impl Region {
+impl Terrain {
     fn render(&self, c: &Context, gl: &mut GlGraphics, viewport: &WorldViewport)
     {
         let (mut x, mut y) = (viewport.offset[0], viewport.offset[1]);
