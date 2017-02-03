@@ -1,4 +1,5 @@
 
+use std::cmp;
 use std::f32;
 use std::f64;
 use std::fs::File;
@@ -14,6 +15,7 @@ extern crate rustc_serialize;
 pub type WorldTime = u64;
 
 pub struct World {
+    pub run: bool,
     pub time: WorldTime,
     pub terrain: Terrain,
     pub creatures: Vec<Creature>,
@@ -41,6 +43,7 @@ impl World {
         }
 
         World {
+            run: true,
             time: 1,
             terrain: terrain,
             total_lives: creatures.len(),
@@ -50,7 +53,7 @@ impl World {
 
     pub fn timeslice(&mut self)
     {
-        if self.creatures.len() <= 0 {
+        if !self.run {
             return;
         }
 
@@ -80,6 +83,10 @@ impl World {
         self.creatures.retain(|ref creature| creature.size >= 0.25);
         //let world_time = self.time;
         //self.creatures.retain(|ref creature| creature.size >= 0.25 && world_time - creature.birthday < 10000);
+
+        if self.creatures.len() <= 0 {
+            self.run = false;
+        }
     }
 }
 
@@ -102,8 +109,30 @@ impl Terrain {
         let mut tiles = [[Tile { ttype: 0, food: 0.0 }; WORLD_HEIGHT]; WORLD_WIDTH];
         for col in 0..WORLD_WIDTH {
             for row in 0..WORLD_HEIGHT {
-                tiles[col][row] = Tile::new();
+                //tiles[col][row] = Tile::new(rand::thread_rng().gen_range(0, 5));
+
+                let left = if col > 0 { tiles[col - 1][row].ttype } else { rand::thread_rng().gen_range(0, 5) };
+                let top = if row > 0 { tiles[col][row - 1].ttype } else { rand::thread_rng().gen_range(0, 5) };
+                //let middle = cmp::min((left + top) / 2 + rand::thread_rng().gen_range(0, 2), 5);
+                let middle = (left + top) / 2;
+                let random = rand::thread_rng().gen_range(0.0, 1.0);
+
+                let ttype = if random <= 0.25 {
+                    //cmp::max(middle - 1, 1)
+                    if middle > 0 { middle - 1 } else { 1 }
+                }
+                else if random >= 0.75 {
+                    //cmp::min(middle + 1, 5)
+                    if middle < 5 { middle + 1 } else { 5 }
+                }
+                else {
+                    middle
+                };
+
+                tiles[col][row] = Tile::new(ttype);
+                print!("{} ", ttype);
             }
+            println!("");
         }
 
         Terrain {
@@ -137,13 +166,14 @@ impl Terrain {
     {
         const TIMES_PER_YEAR : f64 = 1000.0;
         //self.season = (2.0 * f64::consts::PI * time as f64 / TIMES_PER_YEAR).sin().max(0.0);      // half sine wave period growth, uniform over terrain
-        self.season = time as f64 % TIMES_PER_YEAR;
+        //self.season = (time as f64 % TIMES_PER_YEAR) / TIMES_PER_YEAR;
+        self.season = (2.0 * f64::consts::PI * (time as f64 % TIMES_PER_YEAR) / TIMES_PER_YEAR).sin();
 
         //// Grow new food over time
         if time % 10 == 0 {
             for row in 0..self.size[1] {
-                //let season = (f64::consts::PI * (row as f64 / self.size[1] as f64 + self.season / TIMES_PER_YEAR)).sin();   // permanently biases top portion of screen
-                let season = (2.0 * f64::consts::PI * ((row as f64 / self.size[1] as f64 + self.season / TIMES_PER_YEAR) % 1.0)).sin().max(0.0);      // window of growth moving upward and wrapping
+                //let season = (f64::consts::PI * (row as f64 / self.size[1] as f64 + self.season / TIMES_PER_YEAR)).sin();           // permanently biases top portion of screen
+                let season = (2.0 * f64::consts::PI * ((row as f64 / self.size[1] as f64 + self.season) % 1.0)).sin().max(0.0);     // window of growth moving upward and wrapping
                 for col in 0..self.size[0] {
                     self.tiles[col][row].grow(season);
                 }
@@ -159,26 +189,27 @@ pub struct Tile {
 }
 
 impl Tile {
-    fn new() -> Tile
+    fn new(ttype: i32) -> Tile
     {
         return Tile {
-            ttype: rand::thread_rng().gen_range(0, 5),
+            ttype: ttype,
             food: rand::thread_rng().gen_range(0.0, 100.0),
         };
     }
 
     fn feed(&mut self) -> f64
     {
-        let r = self.food.min(rand::thread_rng().gen_range(0.1, 1.0));
-        //let r = self.food.min(rand::thread_rng().gen_range(0.1, 1.0)) * (self.food / 50.0).sqrt();
+        //let r = self.food.min(rand::thread_rng().gen_range(0.1, 1.0));
+        //let r = self.food.min(rand::thread_rng().gen_range(0.1, 1.0) * (self.food / 50.0).sqrt());
+        let r = self.food.min(self.food.sqrt() * 0.1 * rand::thread_rng().gen_range(0.8, 1.2));
         self.food -= r;
         return r;
     }
 
     fn grow(&mut self, season: f64)
     {
-        //self.food += rand::thread_rng().gen_range(0.0, 0.25) * season * self.ttype as f64;
-        self.food += rand::thread_rng().gen_range(0.0, 1.0) * season;
+        //self.food += rand::thread_rng().gen_range(0.0, 1.0) * season;
+        self.food += rand::thread_rng().gen_range(0.0, 0.25) * season * (self.ttype as f64).powf(2.0);
         self.food = self.food.min(100.0).max(0.0);
     }
 }
@@ -188,35 +219,49 @@ impl Tile {
 const CREAT_INIT : i32 = 100;
 
 pub struct Creature {
+    pub id: i32,
+    pub colour: f32,
     pub birthday: WorldTime,
     pub lastbirth: WorldTime,
-    pub colour: f32,
+    pub spawns: i32,
+    pub eaten: f64,
+
+    pub brain: Brain,
 
     pub position: [f64; 2],
     pub size: f64,
     pub speed: f64,
     pub angle: f64,
-
-    pub brain: Brain,
 }
+
+static mut last_id : i32 = 0;
 
 impl Creature {
     fn new(x : f64, y: f64, size: f64, speed: f64, angle: f64, birthday: WorldTime, colour: f32, brain: Option<Brain>) -> Creature
     {
+        let id = unsafe {
+            last_id += 1;
+            last_id
+        };
+
         let newbrain = match brain {
             Some(brain) => brain,
             None => Brain::new()
         };
 
         Creature {
+            id: id,
+            colour: colour,
             birthday: birthday,
             lastbirth: birthday,
-            colour: colour,
+            spawns: 0,
+            eaten: 0.0,
+            brain: newbrain,
+
             position: [ x, y ],
             size: size,
             speed: speed + rand::thread_rng().gen_range(-0.2, 0.2),
             angle: angle + rand::thread_rng().gen_range(-0.4, 0.4),
-            brain: newbrain,
         }
     }
 
@@ -230,6 +275,8 @@ impl Creature {
 
     fn spawn(&mut self, birthday: WorldTime) -> Creature
     {
+        self.spawns += 1;
+
         let newcolour = self.colour + rand::thread_rng().gen_range(-0.1 as f32, 0.1 as f32).min(1.0).max(0.0);
         //let size = self.size + rand::thread_rng().gen_range(-0.25, 0.25);
         let size = self.size / 2.0;
@@ -281,6 +328,7 @@ impl Creature {
         self.position = terrain.wrap_position(self.position);
 
         let food = terrain.tiles[self.position[0] as usize][self.position[1] as usize].feed();
+        self.eaten += food;
         self.size -= self.size * 0.005;  // cost to live
         self.size += ((1.0 / self.size).powf(2.0) * food * 0.01) - 0.005;
         //self.size += ((1.0 / self.size) * food * 0.01);
@@ -419,6 +467,8 @@ fn activation(formula: Activation, x: f64) -> f64
 }
 
 
+const PARAM_BOUND : f64 = 3.0;
+
 #[allow(non_snake_case)]
 #[derive(RustcDecodable, RustcEncodable)]
 pub struct FCLayer {
@@ -429,22 +479,21 @@ pub struct FCLayer {
 
 #[allow(non_snake_case)]
 impl FCLayer {
+
     fn new(width: u32, height: u32, activation: Activation) -> AnyLayer
     {
         let mut W : Vec<Vec<f64>> = vec!();
         for _ in 0..height {
             let mut Wv : Vec<f64> = vec!();
             for _ in 0..width {
-                Wv.push(rand::thread_rng().gen_range(-1.0, 1.0));
-                //Wv.push(rand::thread_rng().gen_range(-2.0, 2.0));
+                Wv.push(rand::thread_rng().gen_range(-PARAM_BOUND, PARAM_BOUND));
             }
             W.push(Wv);
         }
 
         let mut b : Vec<f64> = vec!();
         for _ in 0..height {
-            b.push(rand::thread_rng().gen_range(-1.0, 1.0));
-            //b.push(rand::thread_rng().gen_range(-2.0, 2.0));
+            b.push(rand::thread_rng().gen_range(-PARAM_BOUND, PARAM_BOUND));
         }
 
         AnyLayer::FC(FCLayer {
@@ -460,16 +509,14 @@ impl FCLayer {
         for v in 0..self.W.len() {
             let mut Wv : Vec<f64> = vec!();
             for u in 0..self.W[v].len() {
-                Wv.push((self.W[v][u] + rand::thread_rng().gen_range(-0.4 as f64, 0.4 as f64).powf(3.0)).min(1.0).max(-1.0));
-                //Wv.push((self.W[v][u] + rand::thread_rng().gen_range(-0.4 as f64, 0.4 as f64).powf(3.0)).min(2.0).max(-2.0));
+                Wv.push((self.W[v][u] + rand::thread_rng().gen_range(-0.4 as f64, 0.4 as f64).powf(3.0)).min(PARAM_BOUND).max(-PARAM_BOUND));
             }
             W.push(Wv);
         }
 
         let mut b : Vec<f64> = vec!();
         for v in 0..self.b.len() {
-            b.push((self.b[v] + rand::thread_rng().gen_range(-0.4 as f64, 0.4 as f64).powf(3.0)).min(1.0).max(-1.0));
-            //b.push((self.b[v] + rand::thread_rng().gen_range(-0.4 as f64, 0.4 as f64).powf(3.0)).min(2.0).max(-2.0));
+            b.push((self.b[v] + rand::thread_rng().gen_range(-0.4 as f64, 0.4 as f64).powf(3.0)).min(PARAM_BOUND).max(-PARAM_BOUND));
         }
 
         AnyLayer::FC(FCLayer {

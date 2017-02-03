@@ -10,7 +10,7 @@ use piston::window::WindowSettings;
 use piston::event_loop::*;
 use piston::input::*;
 use piston::input::Button::{ Keyboard, Mouse };
-use piston::input::Input::{ Press, Move };
+use piston::input::Input::{ Press, Release, Move };
 use piston::input::Motion::{ MouseCursor, MouseScroll };
 use glutin_window::GlutinWindow as Window;
 use opengl_graphics::{ GlGraphics, OpenGL };
@@ -37,10 +37,11 @@ fn main() {
         .unwrap();
 
     let mut gl = GlGraphics::new(opengl);
-
     let mut glyph = GlyphCache::new("assets/fonts/NotoSans/NotoSans-Regular.ttf").expect("Failed to load font");
-
     let mut app = App::new();
+
+    let mut mouse_hold = false;
+    let mut mouse_pos : [f64; 2] = [0.0, 0.0];
 
     let mut events = window.events().ups(120).max_fps(10_000);
     while let Some(e) = events.next(&mut window) {
@@ -102,8 +103,12 @@ fn main() {
             Event::Input(Press(Mouse(MouseButton::Left))) => {
                 //println!("clicke");
             },
-            Event::Input(Move(MouseCursor(_, _))) => {
+            Event::Input(Release(Mouse(MouseButton::Left))) => {
+                app.find_closest(mouse_pos);
+            },
+            Event::Input(Move(MouseCursor(x, y))) => {
                 //println!("{} {}", x, y);
+                mouse_pos = [ x, y ];
             },
             Event::Input(Move(MouseScroll(_, y))) => {
                 app.viewport.zoom -= y as f64 * -1.0;
@@ -113,6 +118,7 @@ fn main() {
                     app.viewport.zoom = 64.0;
                 }
             },
+
             Event::Input(Press(Keyboard(Key::D))) => {
                 if app.world.creatures.len() > 0 {
                     let encoded = rustc_serialize::json::encode(&app.world.creatures[0].brain).unwrap();
@@ -120,6 +126,19 @@ fn main() {
                     println!("{}", encoded);
                 }
             },
+            Event::Input(Press(Keyboard(Key::S))) => {
+                if app.viewport.selected > 0 {
+                    for creature in &app.world.creatures {
+                        if creature.id == app.viewport.selected {
+                            creature.write(&format!("creatures/{}.json", creature.id));
+                        }
+                    }
+                }
+            },
+            Event::Input(Press(Keyboard(Key::P))) => {
+                app.world.run = !app.world.run;
+	    }
+
             _ => { },
 	}
     }
@@ -138,6 +157,7 @@ struct WorldViewport {
     size: ScreenSize,
     origin: WorldPoint,
     zoom: f64,
+    selected: i32,
 }
 
 pub struct App {
@@ -154,6 +174,7 @@ impl App {
             size: [ 1280, 720 ],
             origin: [ 0.0, 0.0 ],
             zoom: 7.0,
+            selected: 0,
         };
 
         return App {
@@ -180,13 +201,47 @@ impl App {
         self.world.timeslice();
 
         if self.world.time % 1000 == 0 && self.world.creatures.len() > 0 {
-	    let creature = &self.world.creatures[0];
-	    let encoded = rustc_serialize::json::encode(&creature.brain).unwrap();
-	    //let encoded = rustc_serialize::json::as_pretty_json(&self.world.creatures[0].brain);
-            println!("age: {}", self.world.time - creature.birthday);
-            println!("size: {}", creature.size);
-            println!("{}", encoded);
+            let mut most_spawns = &self.world.creatures[0];
+            let mut most_eaten = &self.world.creatures[0];
+            for creature in &self.world.creatures {
+                if creature.spawns > most_spawns.spawns {
+                    most_spawns = creature;
+                }
+
+                if creature.eaten / (self.world.time - creature.birthday) as f64 > most_eaten.eaten / (self.world.time - most_eaten.birthday) as f64 {
+                    most_eaten = creature;
+                }
+            }
+
+            println!("\nOldest");
+            self.world.creatures[0].print_info(self.world.time);
+
+            println!("\nMost Spawns");
+            most_spawns.print_info(self.world.time);
+
+            println!("\nMost Eaten");
+            most_eaten.print_info(self.world.time);
         }
+    }
+
+    fn find_closest(&mut self, mouse_pos: [f64; 2])
+    {
+        if self.world.creatures.len() <= 0 {
+            return;
+        }
+
+        for creature in &self.world.creatures {
+            let screen_pos = self.viewport.to_screen(creature.position);
+            match screen_pos {
+                None => {},
+                Some(screen_pos) => {
+                    if (screen_pos[0] as f64 - mouse_pos[0]).abs() < 10.0 && (screen_pos[1] as f64 - mouse_pos[1]).abs() < 10.0 {
+                        self.viewport.selected = creature.id
+                    }
+                },
+            }
+        }
+        println!("selected {}", self.viewport.selected);
     }
 }
 
@@ -220,7 +275,7 @@ impl World {
         self.terrain.render(c, gl, viewport);
 
         for creature in &self.creatures {
-            creature.render(c, gl, viewport, self.time);
+            creature.render(c, gl, glyph, viewport, self.time);
         }
 
         const FONTSIZE : u32 = 20;
@@ -292,7 +347,7 @@ impl Tile {
 }
 
 impl Creature {
-    fn render(&self, c: &Context, gl: &mut GlGraphics, viewport: &WorldViewport, time: WorldTime)
+    fn render(&self, c: &Context, gl: &mut GlGraphics, glyph: &mut GlyphCache, viewport: &WorldViewport, time: WorldTime)
     {
         const BLACK : [f32; 4] = [0.0, 0.0, 0.0, 1.0];
         let colour : [f32; 4] = [self.birthday as f32 / time as f32, self.colour, 0.0, 1.0];
@@ -304,8 +359,43 @@ impl Creature {
         let transform = c.transform.trans(screen[0] as f64, screen[1] as f64).rot_rad(self.angle);
         let size = self.size * viewport.zoom;
 
+        if self.id == viewport.selected {
+            ellipse([1.0, 0.0, 0.0, 1.0], rectangle::centered_square(0.0, 0.0, size / 2.0 + 2.0), transform, gl);
+            self.render_info(c, gl, glyph, viewport, time);
+        }
+
         ellipse(colour, rectangle::centered_square(0.0, 0.0, size / 2.0), transform, gl);
         rectangle(BLACK, [ 0.0, -1.0, size, 2.0 ], transform, gl);
+    }
+
+    fn render_info(&self, c: &Context, gl: &mut GlGraphics, glyph: &mut GlyphCache, viewport: &WorldViewport, time: WorldTime)
+    {
+        const FONTSIZE : u32 = 20;
+
+        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 200 + FONTSIZE) as f64);
+        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("ID: {}", self.id), glyph, &c.draw_state, transform, gl);
+
+        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 200 + FONTSIZE * 2) as f64);
+        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Age: {:.4}", time - self.birthday), glyph, &c.draw_state, transform, gl);
+
+        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 200 + FONTSIZE * 3) as f64);
+        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Spawns: {}", self.spawns), glyph, &c.draw_state, transform, gl);
+
+        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 200 + FONTSIZE * 4) as f64);
+        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Eaten: {:.2}", self.eaten), glyph, &c.draw_state, transform, gl);
+    }
+
+    fn print_info(&self, time: WorldTime)
+    {
+        let encoded = rustc_serialize::json::encode(&self.brain).unwrap();
+        //let encoded = rustc_serialize::json::as_pretty_json(&self.world.creatures[0].brain);
+        println!("id: {}", self.id);
+        println!("age: {}", time - self.birthday);
+        println!("colour: {}", self.colour);
+        println!("size: {}", self.size);
+        println!("spawns: {}", self.spawns);
+        println!("eaten: {}", self.eaten / (time - self.birthday) as f64);
+        println!("{}", encoded);
     }
 }
 
