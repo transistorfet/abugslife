@@ -3,7 +3,7 @@ use std::cmp;
 use std::f32;
 use std::f64;
 use std::fs::File;
-use std::io::{ self, Write, Read, Error, ErrorKind };
+use std::io::{ self, Write, Read, ErrorKind };
 
 extern crate rand;
 use self::rand::Rng;
@@ -31,13 +31,13 @@ impl World {
         for i in 0..CREAT_INIT {
             let colour = i as f32 / CREAT_INIT as f32;
 
-            let creature = Creature::generate(terrain.size, 1, colour, None);
-            /*
-            let creature = match Creature::read("creature.json", terrain.size, 1) {
+            //let creature = Creature::generate(terrain.size, 1, colour, None);
+            //*
+            let creature = match Creature::read("creatures/1968.json", terrain.size, 1) {
                 Ok(creature) => creature,
                 Err(err) => { println!("{}", err); continue; },
             };
-            */
+            //*/
 
             creatures.push(creature);
         }
@@ -101,6 +101,7 @@ pub struct Terrain {
     pub tiles: [[Tile; WORLD_HEIGHT]; WORLD_WIDTH],
 
     pub season: f64,
+    pub season_height: usize,
 }
 
 impl Terrain {
@@ -139,6 +140,7 @@ impl Terrain {
             size: [ WORLD_WIDTH, WORLD_HEIGHT ],
             tiles: tiles,
             season: 0.0,
+            season_height: 0,
         }
     }
 
@@ -164,7 +166,7 @@ impl Terrain {
 
     fn timeslice(&mut self, time : WorldTime)
     {
-        const TIMES_PER_YEAR : f64 = 1000.0;
+        const TIMES_PER_YEAR : f64 = 10000.0;
         //self.season = (2.0 * f64::consts::PI * time as f64 / TIMES_PER_YEAR).sin().max(0.0);      // half sine wave period growth, uniform over terrain
         //self.season = (time as f64 % TIMES_PER_YEAR) / TIMES_PER_YEAR;
         self.season = (2.0 * f64::consts::PI * (time as f64 % TIMES_PER_YEAR) / TIMES_PER_YEAR).sin();
@@ -173,9 +175,14 @@ impl Terrain {
         if time % 10 == 0 {
             for row in 0..self.size[1] {
                 //let season = (f64::consts::PI * (row as f64 / self.size[1] as f64 + self.season / TIMES_PER_YEAR)).sin();           // permanently biases top portion of screen
-                let season = (2.0 * f64::consts::PI * ((row as f64 / self.size[1] as f64 + self.season) % 1.0)).sin().max(0.0);     // window of growth moving upward and wrapping
+                let season = (2.0 * f64::consts::PI * ((row as f64 / self.size[1] as f64 + self.season) % 1.0) + (f64::consts::PI / 2.0)).sin().max(0.0);     // window of growth moving upward and wrapping
+
                 for col in 0..self.size[0] {
                     self.tiles[col][row].grow(season);
+                }
+
+                if season >= 0.99 {
+                    self.season_height = row;
                 }
             }
         }
@@ -209,7 +216,7 @@ impl Tile {
     fn grow(&mut self, season: f64)
     {
         //self.food += rand::thread_rng().gen_range(0.0, 1.0) * season;
-        self.food += rand::thread_rng().gen_range(0.0, 0.25) * season * (self.ttype as f64).powf(2.0);
+        self.food += rand::thread_rng().gen_range(0.0, 0.20) * season * (self.ttype as f64).powf(2.0);
         self.food = self.food.min(100.0).max(0.0);
     }
 }
@@ -270,7 +277,7 @@ impl Creature {
         let position = ( rand::thread_rng().gen_range(0.0, size[0] as f64), rand::thread_rng().gen_range(0.0, size[1] as f64) );
         let size = rand::thread_rng().gen_range(0.75, 1.25);
 
-        return Creature::new(position.0, position.1, size, 0.05, 0.0, 1, colour, None);
+        return Creature::new(position.0, position.1, size, 0.05, 0.0, birthday, colour, brain);
     }
 
     fn spawn(&mut self, birthday: WorldTime) -> Creature
@@ -357,7 +364,7 @@ impl Creature {
 
         let mut buffer = String::new();
         match f.read_to_string(&mut buffer) {
-            Ok(buffer) => (),
+            Ok(_) => (),
             Err(err) => return Err(err),
         }
 
@@ -386,8 +393,8 @@ impl Brain {
     {
         let mut layers : Vec<AnyLayer> = vec!();
         layers.push(FCLayer::new(BRAIN_IN, BRAIN_L1, Activation::Sigmoid));
-        layers.push(FCLayer::new(BRAIN_L1, BRAIN_L2, Activation::Sigmoid));
-        layers.push(FCLayer::new(BRAIN_L2, BRAIN_OUT, Activation::Sigmoid));
+        layers.push(FCLayer::new(BRAIN_L1, BRAIN_L2, Activation::SinC));
+        layers.push(FCLayer::new(BRAIN_L2, BRAIN_OUT, Activation::Tanh));
 
         Brain {
             layers: layers,

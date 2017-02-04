@@ -107,7 +107,6 @@ fn main() {
                 app.find_closest(mouse_pos);
             },
             Event::Input(Move(MouseCursor(x, y))) => {
-                //println!("{} {}", x, y);
                 mouse_pos = [ x, y ];
             },
             Event::Input(Move(MouseScroll(_, y))) => {
@@ -130,7 +129,10 @@ fn main() {
                 if app.viewport.selected > 0 {
                     for creature in &app.world.creatures {
                         if creature.id == app.viewport.selected {
-                            creature.write(&format!("creatures/{}.json", creature.id));
+                            match creature.write(&format!("creatures/{}.json", creature.id)) {
+                                Ok(_) => println!("Saved creature {}", creature.id),
+                                Err(err) => println!("Error while saving creature {}: {}", creature.id, err),
+                            }
                         }
                     }
                 }
@@ -241,12 +243,7 @@ impl App {
                 },
             }
         }
-        println!("selected {}", self.viewport.selected);
     }
-}
-
-trait Renderable {
-    fn render(&self, c: &Context, gl: &mut GlGraphics, glyph: &mut GlyphCache, viewport: WorldViewport);
 }
 
 
@@ -267,8 +264,6 @@ impl WorldViewport {
 }
 
 
-
-
 impl World {
     fn render(&self, c: &Context, gl: &mut GlGraphics, glyph: &mut GlyphCache, viewport: &WorldViewport)
     {
@@ -280,21 +275,18 @@ impl World {
 
         const FONTSIZE : u32 = 20;
 
-        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + FONTSIZE) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Pop: {}", self.creatures.len()), glyph, &c.draw_state, transform, gl);
-        //println!("Pop: {}", self.creatures.len());
+        let lines = [
+            &format!("Pop: {}", self.creatures.len()),
+            &format!("Total: {}", self.total_lives),
+            &format!("Food: {:.0}", self.terrain.total_food()),
+            &format!("Season: {:.4}", self.terrain.season),
+            &format!("Oldest: {} / {}", self.get_oldest(), self.time),
+        ];
 
-        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + FONTSIZE * 2) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Total: {}", self.total_lives), glyph, &c.draw_state, transform, gl);
-
-        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + FONTSIZE * 3) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Food: {:.0}", self.terrain.total_food()), glyph, &c.draw_state, transform, gl);
-
-        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + FONTSIZE * 4) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Season: {:.4}", self.terrain.season), glyph, &c.draw_state, transform, gl);
-
-        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + FONTSIZE * 5) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Oldest: {} / {}", self.get_oldest(), self.time), glyph, &c.draw_state, transform, gl);
+        for i in 0..lines.len() {
+            let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 20 + FONTSIZE * i as u32) as f64);
+            Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(lines[i], glyph, &c.draw_state, transform, gl);        
+        }
     }
 
     fn get_oldest(&self) -> u64
@@ -306,6 +298,7 @@ impl World {
         return self.time - self.creatures[0].birthday;
     }
 }
+
 
 impl Terrain {
     fn render(&self, c: &Context, gl: &mut GlGraphics, viewport: &WorldViewport)
@@ -325,8 +318,12 @@ impl Terrain {
                 break;
             }
         }
+
+
+        rectangle([1.0, 0.0, 0.0, 1.0], [ 0.0, 0.0, 20.0, 1.0 ], c.transform.trans(viewport.offset[0] as f64, self.season_height as f64 * viewport.zoom + viewport.offset[1] as f64), gl);
     }
 }
+
 
 impl Tile {
     fn render(&self, c: &Context, gl: &mut GlGraphics, x : u32, y : u32, size : f64)
@@ -345,6 +342,7 @@ impl Tile {
         [ self.food as f32 / 100.0, self.food as f32 / 100.0, self.food as f32 / 100.0, 1.0 ]     // black and white food
     }
 }
+
 
 impl Creature {
     fn render(&self, c: &Context, gl: &mut GlGraphics, glyph: &mut GlyphCache, viewport: &WorldViewport, time: WorldTime)
@@ -372,17 +370,18 @@ impl Creature {
     {
         const FONTSIZE : u32 = 20;
 
-        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 200 + FONTSIZE) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("ID: {}", self.id), glyph, &c.draw_state, transform, gl);
+        let lines = [
+            &format!("ID: {}", self.id),
+            &format!("Age: {:.4}", time - self.birthday),
+            &format!("Spawns: {}", self.spawns),
+            &format!("Eaten: {:.2}", self.eaten),
+            &format!("Eaten/Y: {:.2}", self.eaten / (time - self.birthday) as f64),
+        ];
 
-        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 200 + FONTSIZE * 2) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Age: {:.4}", time - self.birthday), glyph, &c.draw_state, transform, gl);
-
-        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 200 + FONTSIZE * 3) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Spawns: {}", self.spawns), glyph, &c.draw_state, transform, gl);
-
-        let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 200 + FONTSIZE * 4) as f64);
-        Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("Eaten: {:.2}", self.eaten), glyph, &c.draw_state, transform, gl);
+        for i in 0..lines.len() {
+            let transform = c.transform.trans((viewport.size[0] + 20) as f64, (viewport.offset[1] + 250 + FONTSIZE * i as u32) as f64);
+            Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(lines[i], glyph, &c.draw_state, transform, gl);        
+        }
     }
 
     fn print_info(&self, time: WorldTime)
