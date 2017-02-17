@@ -26,14 +26,15 @@ impl World {
     pub fn new() -> World
     {
         let terrain = Terrain::new();
+        let preloads : Vec<i32> = vec!(1237, 1368, 1968, 2128, 138438, 150268);
 
         let mut creatures : Vec<Creature> = Vec::new();
         for i in 0..CREAT_INIT {
             let colour = i as f32 / CREAT_INIT as f32;
 
-            //let creature = Creature::generate(terrain.size, 1, colour, None);
+            //let creature = Creature::generate(terrain.size, 1, colour, -1, None);
             //*
-            let creature = match Creature::read("creatures/1968.json", terrain.size, 1) {
+            let creature = match Creature::read(&format!("creatures/{}.json", preloads[i as usize % preloads.len()]), terrain.size, 1, i % preloads.len() as CreatureID + 1) {
                 Ok(creature) => creature,
                 Err(err) => { println!("{}", err); continue; },
             };
@@ -225,8 +226,13 @@ impl Tile {
 
 const CREAT_INIT : i32 = 100;
 
+pub type CreatureID = i32;
+
 pub struct Creature {
-    pub id: i32,
+    pub id: CreatureID,
+    pub parent: CreatureID,
+    pub ancestor: CreatureID,
+
     pub colour: f32,
     pub birthday: WorldTime,
     pub lastbirth: WorldTime,
@@ -241,10 +247,10 @@ pub struct Creature {
     pub angle: f64,
 }
 
-static mut last_id : i32 = 0;
+static mut last_id : CreatureID = 0;
 
 impl Creature {
-    fn new(x : f64, y: f64, size: f64, speed: f64, angle: f64, birthday: WorldTime, colour: f32, brain: Option<Brain>) -> Creature
+    fn new(x : f64, y: f64, size: f64, speed: f64, angle: f64, birthday: WorldTime, colour: f32, parent: CreatureID, ancestor: CreatureID, brain: Option<Brain>) -> Creature
     {
         let id = unsafe {
             last_id += 1;
@@ -258,6 +264,9 @@ impl Creature {
 
         Creature {
             id: id,
+            parent: parent,
+            ancestor: if ancestor > 0 { ancestor } else { id },
+
             colour: colour,
             birthday: birthday,
             lastbirth: birthday,
@@ -272,12 +281,12 @@ impl Creature {
         }
     }
 
-    fn generate(size: [usize; 2], birthday: WorldTime, colour: f32, brain: Option<Brain>) -> Creature
+    fn generate(size: [usize; 2], birthday: WorldTime, colour: f32, ancestor: CreatureID, brain: Option<Brain>) -> Creature
     {
         let position = ( rand::thread_rng().gen_range(0.0, size[0] as f64), rand::thread_rng().gen_range(0.0, size[1] as f64) );
         let size = rand::thread_rng().gen_range(0.75, 1.25);
 
-        return Creature::new(position.0, position.1, size, 0.05, 0.0, birthday, colour, brain);
+        return Creature::new(position.0, position.1, size, 0.05, 0.0, birthday, colour, -1, ancestor, brain);
     }
 
     fn spawn(&mut self, birthday: WorldTime) -> Creature
@@ -288,7 +297,7 @@ impl Creature {
         //let size = self.size + rand::thread_rng().gen_range(-0.25, 0.25);
         let size = self.size / 2.0;
         self.size -= size;
-        return Creature::new(self.position[0] + 2.0, self.position[1] + 2.0, size, self.speed, self.angle, birthday, newcolour, Some(self.brain.spawn()));
+        return Creature::new(self.position[0] + 2.0, self.position[1] + 2.0, size, self.speed, self.angle, birthday, newcolour, self.id, self.ancestor, Some(self.brain.spawn()));
     }
 
     fn timeslice(&mut self, terrain : &mut Terrain)
@@ -355,7 +364,7 @@ impl Creature {
         };
     }
 
-    pub fn read(filename: &str, size: [usize; 2], birthday: WorldTime) -> Result<Creature, io::Error>
+    pub fn read(filename: &str, size: [usize; 2], birthday: WorldTime, ancestor: CreatureID) -> Result<Creature, io::Error>
     {
         let mut f = match File::open(filename) {
             Ok(f) => f,
@@ -373,7 +382,7 @@ impl Creature {
             Err(err) => { println!("{}", err); return Err(io::Error::new(ErrorKind::InvalidData, "error decoding json")); },
         };
 
-        return Ok(Creature::generate(size, birthday, rand::thread_rng().gen_range(0.0 as f32, 1.0 as f32).min(1.0).max(0.0), brain));
+        return Ok(Creature::generate(size, birthday, rand::thread_rng().gen_range(0.0 as f32, 1.0 as f32).min(1.0).max(0.0), ancestor, brain));
     }
 }
 

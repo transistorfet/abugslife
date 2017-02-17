@@ -96,10 +96,7 @@ fn main() {
                     app.viewport.zoom = 4.0;
                 }
             },
-            Event::Input(Press(Keyboard(Key::O))) => {
-                app.viewport.origin[0] = 0.0;
-                app.viewport.origin[1] = 0.0;
-            },
+
             Event::Input(Press(Mouse(MouseButton::Left))) => {
                 //println!("clicke");
             },
@@ -117,14 +114,25 @@ fn main() {
                     app.viewport.zoom = 64.0;
                 }
             },
-
-            Event::Input(Press(Keyboard(Key::D))) => {
-                if app.world.creatures.len() > 0 {
-                    let encoded = rustc_serialize::json::encode(&app.world.creatures[0].brain).unwrap();
-                    //let encoded = rustc_serialize::json::as_pretty_json(&c.brain);
-                    println!("{}", encoded);
-                }
+            Event::Input(Press(Keyboard(Key::O))) => {
+                app.viewport.origin[0] = 0.0;
+                app.viewport.origin[1] = 0.0;
             },
+
+            Event::Input(Press(Keyboard(Key::C))) => {
+		let mut n : Vec<CreatureID> = vec!(0, 0, 0, 0, 0, 0, 0);
+		for creature in &app.world.creatures {
+	            n[creature.ancestor as usize] += 1;
+		}
+                for i in n {
+                    print!("{} ", i);
+                }
+                println!("");
+	    },
+
+            Event::Input(Press(Keyboard(Key::P))) => {
+                app.world.run = !app.world.run;
+	    },
             Event::Input(Press(Keyboard(Key::S))) => {
                 if app.viewport.selected > 0 {
                     for creature in &app.world.creatures {
@@ -137,9 +145,31 @@ fn main() {
                     }
                 }
             },
-            Event::Input(Press(Keyboard(Key::P))) => {
-                app.world.run = !app.world.run;
-	    }
+            Event::Input(Press(Keyboard(Key::D))) => {
+                if app.world.creatures.len() > 0 {
+                    let encoded = rustc_serialize::json::encode(&app.world.creatures[0].brain).unwrap();
+                    //let encoded = rustc_serialize::json::as_pretty_json(&c.brain);
+                    println!("{}", encoded);
+                }
+            },
+            Event::Input(Press(Keyboard(Key::I))) => {
+                app.input_on = true;
+                app.input_current = 0;
+            },
+
+            Event::Input(Press(Keyboard(Key::Return))) => {
+                if app.input_on {
+                    app.viewport.selected = app.input_current;
+                    app.input_on = false;
+                }
+            },
+            Event::Input(Press(Keyboard(key))) => {
+                if app.input_on {
+                    if key >= Key::D0 && key <= Key::D9 {
+                        app.input_current = app.input_current * 10 + (key.code() - 0x30);
+                    }
+                }
+            },
 
             _ => { },
 	}
@@ -149,6 +179,7 @@ fn main() {
 
 const BORDER_WIDTH : u32 = 20;
 const SIDE_WIDTH : u32 = 250;
+const FONTSIZE : u32 = 20;
 
 
 type ScreenPoint = [u32; 2];
@@ -165,6 +196,9 @@ struct WorldViewport {
 pub struct App {
     world: World,
     viewport: WorldViewport,
+
+    input_on: bool,
+    input_current: i32,
 }
 
 impl App {
@@ -182,6 +216,9 @@ impl App {
         return App {
             world: World::new(),
             viewport: viewport,
+
+            input_on: false,
+            input_current: 0,
         };
     }
 
@@ -193,6 +230,11 @@ impl App {
         self.viewport.size = [ args.width - SIDE_WIDTH - BORDER_WIDTH, args.height - (BORDER_WIDTH * 2) ];
 
         self.world.render(c, gl, glyph, &self.viewport);
+
+        if self.input_on {
+            let transform = c.transform.trans(self.viewport.offset[0] as f64, (self.viewport.size[1] + self.viewport.offset[1] + FONTSIZE) as f64);
+            Text::new_color([1.0, 1.0, 1.0, 1.0], FONTSIZE).draw(&format!("> {}", self.input_current), glyph, &c.draw_state, transform, gl);        
+        }
     }
 
     fn update(&mut self, args: &UpdateArgs)
@@ -272,8 +314,6 @@ impl World {
         for creature in &self.creatures {
             creature.render(c, gl, glyph, viewport, self.time);
         }
-
-        const FONTSIZE : u32 = 20;
 
         let lines = [
             &format!("Pop: {}", self.creatures.len()),
@@ -368,10 +408,10 @@ impl Creature {
 
     fn render_info(&self, c: &Context, gl: &mut GlGraphics, glyph: &mut GlyphCache, viewport: &WorldViewport, time: WorldTime)
     {
-        const FONTSIZE : u32 = 20;
-
         let lines = [
             &format!("ID: {}", self.id),
+            &format!("Parent: {}", self.parent),
+            &format!("Ancestor: {}", self.ancestor),
             &format!("Age: {:.4}", time - self.birthday),
             &format!("Spawns: {}", self.spawns),
             &format!("Eaten: {:.2}", self.eaten),
@@ -389,6 +429,7 @@ impl Creature {
         let encoded = rustc_serialize::json::encode(&self.brain).unwrap();
         //let encoded = rustc_serialize::json::as_pretty_json(&self.world.creatures[0].brain);
         println!("id: {}", self.id);
+        println!("ancestor: {}", self.ancestor);
         println!("age: {}", time - self.birthday);
         println!("colour: {}", self.colour);
         println!("size: {}", self.size);

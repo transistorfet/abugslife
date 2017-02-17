@@ -1,0 +1,11 @@
+
+
+What if you based the world on eating numbers, and each creature could use formulas to get the numbers it needs in order to survive.
+They could all be trying to get the same number (like ATP), and they'd need to sometimes expend their numbers in order to do things
+like move, or use a formula to 'metabolize' one number into the number you need.
+
+So the ground tiles would have a bunch of numbers stored on each, and they would replenish themselves using different formula.  The
+creatures could then 'eat' those numbers.  They would then use a formula to convert the number into the 'energy' number it needs.
+It can then use those 'energy' numbers in equations to move and interact and stuff.  Then other creatures could possible 'eat' the
+other creatures to get their energy numbers, but they'd have to have a cost or restriction of some kind.
+ 

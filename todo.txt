@@ -1,0 +1,18 @@
+
+    * record lineage somehow
+    * add ability to type in id of creature to select
+    * change the food algorithm to grow (and die) food faster with a lower limit per tile so that food doesnt' accumulate as much, and
+      there isn't as much difference between the high food environment vs the low food environment.  As it is now, different creatures
+      thrive in the different environments, and a higher food environment makes them behave more like what i want to see
+    * what if you made it so that creatures could either eat or move forward, but not both 
+    * try lstm/gru/or something
+
+    * make non-uniform terrain generator, to make splotches of growth and deadness
+     
+    * add stats display for how many spawns a creature has, and how much food per timeslices they've eaten
+    * could you add a way to keep all the creatures that ever lived, and store the dead ones in a separate list
+      so that you can calculate statistics on them?  Or do it as a running tally?
+
+    * fix file writing so that it doesn't overwrite conflicting file names
+    * should there be a way to dump all the creatures in ranked order?
+
