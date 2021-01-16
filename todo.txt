@@ -1,4 +1,11 @@
 
+    * possible math libs: nalgebra, cgmath, euclid, euler, linear
+
+    * print average age?
+
+
+    * look into NEAT algorithm
+
     * record lineage somehow
     * add ability to type in id of creature to select
     * change the food algorithm to grow (and die) food faster with a lower limit per tile so that food doesnt' accumulate as much, and
