@@ -18,13 +18,13 @@ certain size will die.
 The effect looks like bugs scurrying about, in search of food.  It is possible, after many generations, to get creatures that
 show a strong tendency to hang around tiles with lots of food, and scatter in search of food when those tiles run out of food.
 
-To run:
+Running
 -------
 
 You will need Rust and Cargo installed.  If using debian, you can run:
 
 ```sh
-sudo apt-get install rustc cargo"
+sudo apt-get install rustc cargo
 ```
 
 ```sh
@@ -38,8 +38,8 @@ or switch the commented code around to randomly generate new creatures from scra
 Screenshots
 -----------
 
-![](https://github.com/transistorfet/abugslife/raw/master/images/Screenshot1.png)
-![](https://github.com/transistorfet/abugslife/raw/master/images/Screenshot2.png)
-![](https://github.com/transistorfet/abugslife/raw/master/images/Screenshot3.png)
-![](https://github.com/transistorfet/abugslife/raw/master/images/Screenshot4.png)
+![](images/Screenshot1.png)
+![](images/Screenshot2.png)
+![](images/Screenshot3.png)
+![](images/Screenshot4.png)
  
